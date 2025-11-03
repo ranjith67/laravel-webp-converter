@@ -158,13 +158,15 @@ class Product extends Model
 
     protected $webpImages = ['image', 'gallery'];
 
-    // Define custom directories
+    // Define custom directories for storage
     protected $webpDirectories = [
         'image' => 'products/featured',
         'gallery' => 'products/gallery',
     ];
 }
 ```
+
+**Note:** If using Filament with custom directories, ensure the `->directory()` in FileUpload matches the `$webpDirectories` value. See [Filament Integration](#filament-integration) section for details.
 
 ---
 
@@ -293,6 +295,46 @@ Forms\Components\FileUpload::make('image')
 ```
 
 **Why this matters:** Without these settings in v4, files are stored privately and `getWebPUrl()` may not generate accessible URLs.
+
+### Custom Directory with Filament
+
+If you specify a custom directory in Filament's FileUpload component, you must also define it in your model's `$webpDirectories` property:
+
+**Filament Form:**
+
+```php
+Forms\Components\FileUpload::make('image')
+    ->image()
+    ->disk('public')
+    ->directory('products/featured')  // Custom directory
+    ->required();
+```
+
+**Model Configuration:**
+
+```php
+class Product extends Model
+{
+    use HasWebPImages;
+
+    protected $webpImages = ['image'];
+
+    // IMPORTANT: Must match Filament's directory() setting
+    protected $webpDirectories = [
+        'image' => 'products/featured',  // Same as FileUpload directory
+    ];
+
+    protected $webpSizeColumns = [
+        'image' => [
+            'thumbnail' => 'image_thumbnail',
+            'medium' => 'image_medium',
+            'large' => 'image_large',
+        ],
+    ];
+}
+```
+
+**⚠️ Important:** The directory specified in `->directory()` and `$webpDirectories` must match, otherwise WebP files will be stored in the wrong location.
 
 ### How It Works
 
@@ -594,6 +636,29 @@ Forms\Components\FileUpload::make('image')
 ```
 
 Filament v4 defaults to `local` disk with `private` visibility, which prevents public URL access.
+
+---
+
+### Files Stored in Wrong Directory (Filament)
+
+If WebP files are being stored in an unexpected location when using Filament:
+
+**Problem:** Mismatch between Filament's `directory()` setting and model's `$webpDirectories`.
+
+**Solution:** Ensure they match:
+
+```php
+// Filament FileUpload
+Forms\Components\FileUpload::make('image')
+    ->directory('products/featured');  // This...
+
+// Model configuration
+protected $webpDirectories = [
+    'image' => 'products/featured',  // ...must match this!
+];
+```
+
+If you don't specify `$webpDirectories`, the package uses `table_name/attribute_name` by default (e.g., `products/image`).
 
 ---
 
