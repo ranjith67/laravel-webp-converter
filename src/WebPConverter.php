@@ -12,61 +12,65 @@ class WebPConverter
      *
      * @param UploadedFile $file
      * @param string|null $directory
-     * @param string|null $filename
      * @return array
      */
-    public function convert(UploadedFile $file, ?string $directory = null, ?string $filename = null): array
+    public function convert(UploadedFile $file, ?string $directory = null): array
     {
         // Validate if extension is allowed
         if (!$this->isAllowedExtension($file)) {
             throw new \Exception('File type not allowed for WebP conversion.');
         }
 
-        // Generate filename if not provided
-        if (!$filename) {
-            $filename = pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME);
-            $filename = $this->sanitizeFilename($filename);
-        }
-
-        // Set directory
         $directory = $directory ?? 'images';
+        $disk = config('webp.disk', 'public');
         
-        // Convert to WebP
-        $webpPath = $this->convertToWebP($file, $directory, $filename);
+        // Let Laravel store the original file with secure random name
+        $originalPath = $file->store($directory, $disk);
         
-        // Store original if configured
-        $originalPath = null;
-        if (config('webp.keep_original', true)) {
-            $originalPath = $this->storeOriginal($file, $directory, $filename);
+        // Get the secure filename Laravel generated
+        $filename = pathinfo($originalPath, PATHINFO_FILENAME);
+        $storedFilePath = Storage::disk($disk)->path($originalPath);
+        
+        // Convert the stored file to WebP
+        $webpPath = $this->convertToWebP($storedFilePath, $directory, $filename, $disk);
+        
+        // Generate different sizes
+        $sizes = $this->generateSizes($storedFilePath, $directory, $filename, $disk);
+        
+        // Delete original if keep_original is false
+        if (!config('webp.keep_original', true)) {
+            Storage::disk($disk)->delete($originalPath);
+            $originalPath = null;
         }
 
         return [
             'webp' => $webpPath,
             'original' => $originalPath,
-            'sizes' => $this->generateSizes($file, $directory, $filename),
+            'sizes' => $sizes,
         ];
     }
 
     /**
-     * Convert image to WebP.
+     * Convert stored image to WebP.
      *
-     * @param UploadedFile $file
+     * @param string $filePath
      * @param string $directory
      * @param string $filename
+     * @param string $disk
      * @return string
      */
-    protected function convertToWebP(UploadedFile $file, string $directory, string $filename): string
+    protected function convertToWebP(string $filePath, string $directory, string $filename, string $disk): string
     {
-        $extension = strtolower($file->getClientOriginalExtension());
+        $extension = strtolower(pathinfo($filePath, PATHINFO_EXTENSION));
         
         // Create image resource based on file type
         switch ($extension) {
             case 'jpeg':
             case 'jpg':
-                $image = imagecreatefromjpeg($file->getRealPath());
+                $image = imagecreatefromjpeg($filePath);
                 break;
             case 'png':
-                $image = imagecreatefrompng($file->getRealPath());
+                $image = imagecreatefrompng($filePath);
                 break;
             default:
                 throw new \Exception('Unsupported image type.');
@@ -83,12 +87,11 @@ class WebPConverter
         imagewebp($image, $tempWebP, config('webp.quality', 80));
         imagedestroy($image);
 
-        // Store WebP file
+        // Store WebP file with same filename
         $webpFilename = $filename . '.webp';
         $webpPath = $directory . '/' . $webpFilename;
         
-        Storage::disk(config('webp.disk', 'public'))
-            ->put($webpPath, file_get_contents($tempWebP));
+        Storage::disk($disk)->put($webpPath, file_get_contents($tempWebP));
 
         // Clean up temp file
         unlink($tempWebP);
@@ -97,45 +100,27 @@ class WebPConverter
     }
 
     /**
-     * Store original image.
-     *
-     * @param UploadedFile $file
-     * @param string $directory
-     * @param string $filename
-     * @return string
-     */
-    protected function storeOriginal(UploadedFile $file, string $directory, string $filename): string
-    {
-        $extension = $file->getClientOriginalExtension();
-        $originalFilename = $filename . '.' . $extension;
-        
-        return $file->storeAs(
-            $directory,
-            $originalFilename,
-            config('webp.disk', 'public')
-        );
-    }
-
-    /**
      * Generate different sizes of the image.
      *
-     * @param UploadedFile $file
+     * @param string $filePath
      * @param string $directory
      * @param string $filename
+     * @param string $disk
      * @return array
      */
-    protected function generateSizes(UploadedFile $file, string $directory, string $filename): array
+    protected function generateSizes(string $filePath, string $directory, string $filename, string $disk): array
     {
         $sizes = config('webp.sizes', []);
         $generatedSizes = [];
 
         foreach ($sizes as $sizeName => $width) {
             $generatedSizes[$sizeName] = $this->resizeAndConvert(
-                $file,
+                $filePath,
                 $directory,
                 $filename,
                 $sizeName,
-                $width
+                $width,
+                $disk
             );
         }
 
@@ -145,30 +130,32 @@ class WebPConverter
     /**
      * Resize and convert image.
      *
-     * @param UploadedFile $file
+     * @param string $filePath
      * @param string $directory
      * @param string $filename
      * @param string $sizeName
      * @param int $width
+     * @param string $disk
      * @return string
      */
     protected function resizeAndConvert(
-        UploadedFile $file,
+        string $filePath,
         string $directory,
         string $filename,
         string $sizeName,
-        int $width
+        int $width,
+        string $disk
     ): string {
-        $extension = strtolower($file->getClientOriginalExtension());
+        $extension = strtolower(pathinfo($filePath, PATHINFO_EXTENSION));
         
         // Create image resource
         switch ($extension) {
             case 'jpeg':
             case 'jpg':
-                $image = imagecreatefromjpeg($file->getRealPath());
+                $image = imagecreatefromjpeg($filePath);
                 break;
             case 'png':
-                $image = imagecreatefrompng($file->getRealPath());
+                $image = imagecreatefrompng($filePath);
                 break;
             default:
                 throw new \Exception('Unsupported image type.');
@@ -208,8 +195,7 @@ class WebPConverter
         $webpFilename = $filename . '_' . $sizeName . '.webp';
         $webpPath = $directory . '/' . $webpFilename;
         
-        Storage::disk(config('webp.disk', 'public'))
-            ->put($webpPath, file_get_contents($tempWebP));
+        Storage::disk($disk)->put($webpPath, file_get_contents($tempWebP));
 
         unlink($tempWebP);
 
@@ -228,20 +214,5 @@ class WebPConverter
         $allowed = config('webp.allowed_extensions', ['jpg', 'jpeg', 'png']);
         
         return in_array($extension, $allowed);
-    }
-
-    /**
-     * Sanitize filename.
-     *
-     * @param string $filename
-     * @return string
-     */
-    protected function sanitizeFilename(string $filename): string
-    {
-        // Remove special characters and replace spaces with underscores
-        $filename = preg_replace('/[^A-Za-z0-9\-_]/', '', str_replace(' ', '_', $filename));
-        
-        // Add timestamp to make it unique
-        return $filename . '_' . time();
     }
 }
