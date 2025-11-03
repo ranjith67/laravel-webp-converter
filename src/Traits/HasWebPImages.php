@@ -18,8 +18,11 @@ trait HasWebPImages
     {
         // Check if this attribute should be converted to WebP
         if ($this->shouldConvertToWebP($key, $value)) {
+            // Convert Livewire temporary file to UploadedFile if needed
+            $uploadedFile = $this->convertToUploadedFile($value);
+            
             $converter = app('webp-converter');
-            $result = $converter->convert($value, $this->getWebPDirectory($key));
+            $result = $converter->convert($uploadedFile, $this->getWebPDirectory($key));
             
             // Store the WebP path
             $value = $result['webp'];
@@ -46,17 +49,94 @@ trait HasWebPImages
      */
     protected function shouldConvertToWebP(string $key, $value): bool
     {
-        // Must be an UploadedFile
-        if (!$value instanceof UploadedFile) {
+        // Check if attribute is in the webpImages array
+        if (!property_exists($this, 'webpImages') || !in_array($key, $this->webpImages)) {
             return false;
         }
 
-        // Check if attribute is in the webpImages array
-        if (property_exists($this, 'webpImages') && in_array($key, $this->webpImages)) {
+        // Must be an UploadedFile
+        if ($value instanceof UploadedFile) {
+            return true;
+        }
+
+        // Check for Livewire temporary file (Filament compatibility)
+        if (is_string($value) && $this->isLivewireTemporaryFile($value)) {
             return true;
         }
 
         return false;
+    }
+
+    /**
+     * Check if the value is a Livewire temporary file.
+     *
+     * @param mixed $value
+     * @return bool
+     */
+    protected function isLivewireTemporaryFile($value): bool
+    {
+        if (!is_string($value)) {
+            return false;
+        }
+
+        // Check for Livewire temporary file patterns
+        return str_starts_with($value, 'livewire-tmp/') || 
+               (class_exists(\Livewire\Features\SupportFileUploads\TemporaryUploadedFile::class) && 
+                $value instanceof \Livewire\Features\SupportFileUploads\TemporaryUploadedFile);
+    }
+
+    /**
+     * Convert Livewire temporary file to UploadedFile.
+     *
+     * @param mixed $value
+     * @return UploadedFile
+     */
+    protected function convertToUploadedFile($value): UploadedFile
+    {
+        // Already an UploadedFile
+        if ($value instanceof UploadedFile) {
+            return $value;
+        }
+
+        // Handle Livewire TemporaryUploadedFile
+        if (class_exists(\Livewire\Features\SupportFileUploads\TemporaryUploadedFile::class) && 
+            $value instanceof \Livewire\Features\SupportFileUploads\TemporaryUploadedFile) {
+            // Get the real path of the temporary file
+            $tempPath = $value->getRealPath();
+            $originalName = $value->getClientOriginalName();
+            $mimeType = $value->getMimeType();
+            
+            return new UploadedFile(
+                $tempPath,
+                $originalName,
+                $mimeType,
+                null,
+                true // Test mode - don't validate
+            );
+        }
+
+        // Handle string path (Livewire temporary file path)
+        if (is_string($value) && str_starts_with($value, 'livewire-tmp/')) {
+            $disk = config('filesystems.default');
+            $storage = \Storage::disk($disk);
+            
+            if ($storage->exists($value)) {
+                $tempPath = $storage->path($value);
+                $originalName = basename($value);
+                $mimeType = $storage->mimeType($value);
+                
+                return new UploadedFile(
+                    $tempPath,
+                    $originalName,
+                    $mimeType,
+                    null,
+                    true
+                );
+            }
+        }
+
+        // Fallback - throw exception if we can't convert
+        throw new \Exception('Unable to convert value to UploadedFile instance.');
     }
 
     /**

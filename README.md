@@ -12,7 +12,7 @@ Automatically convert uploaded images to WebP format in Laravel with support for
 - 🔒 **Secure** - Uses Laravel's built-in secure file handling
 - ⚙️ **Configurable** - Customize quality, sizes, and storage options
 - 📦 **Laravel Integration** - Works seamlessly with Eloquent models
-- 🎨 **Filament Compatible** - Works with Filament admin panel out of the box
+- 🎨 **Filament Compatible** - Works with Filament v3 & v4 admin panels (requires Livewire)
 - 💾 **Keep Original** - Option to keep original images for fallback support
 
 ## Requirements
@@ -20,6 +20,7 @@ Automatically convert uploaded images to WebP format in Laravel with support for
 - PHP 8.1 or higher
 - Laravel 11.0 or higher
 - GD extension enabled
+- Livewire 3.x (optional, required for Filament compatibility)
 
 ## Installation
 
@@ -40,6 +41,7 @@ php artisan vendor:publish --tag=webp-config
 ```
 
 This will create a `config/webp.php` file where you can customize:
+
 - Image quality
 - Generated sizes (thumbnail, medium, large)
 - Storage disk
@@ -228,22 +230,25 @@ return [
 
 ### Configuration Options
 
-| Option | Default | Description |
-|--------|---------|-------------|
-| `quality` | `80` | WebP compression quality (0-100). Higher = better quality, larger file size. |
-| `keep_original` | `true` | Keep the original uploaded image (JPG/PNG) for fallback support. |
-| `disk` | `'public'` | Laravel storage disk to use (must be defined in `config/filesystems.php`). |
-| `sizes` | `[...]` | Array of image sizes to generate. Key = size name, Value = width in pixels. |
-| `allowed_extensions` | `[...]` | Array of allowed image extensions that can be converted to WebP. |
+| Option               | Default    | Description                                                                  |
+| -------------------- | ---------- | ---------------------------------------------------------------------------- |
+| `quality`            | `80`       | WebP compression quality (0-100). Higher = better quality, larger file size. |
+| `keep_original`      | `true`     | Keep the original uploaded image (JPG/PNG) for fallback support.             |
+| `disk`               | `'public'` | Laravel storage disk to use (must be defined in `config/filesystems.php`).   |
+| `sizes`              | `[...]`    | Array of image sizes to generate. Key = size name, Value = width in pixels.  |
+| `allowed_extensions` | `[...]`    | Array of allowed image extensions that can be converted to WebP.             |
 
 ---
 
 ## Filament Integration
 
-This package works seamlessly with [Filament](https://filamentphp.com/) admin panels:
+This package works seamlessly with [Filament v3 and v4](https://filamentphp.com/) admin panels through Livewire temporary file detection.
+
+### Filament v3
 
 ```php
 use Filament\Forms;
+use Filament\Tables;
 
 public static function form(Form $form): Form
 {
@@ -251,7 +256,7 @@ public static function form(Form $form): Form
         ->schema([
             Forms\Components\TextInput::make('name')
                 ->required(),
-            
+
             Forms\Components\FileUpload::make('image')
                 ->image()
                 ->imageEditor()
@@ -265,7 +270,7 @@ public static function table(Table $table): Table
     return $table
         ->columns([
             Tables\Columns\TextColumn::make('name'),
-            
+
             Tables\Columns\ImageColumn::make('image')
                 ->getStateUsing(fn ($record) => $record->getWebPUrl('image', 'thumbnail'))
                 ->circular(),
@@ -273,7 +278,32 @@ public static function table(Table $table): Table
 }
 ```
 
-The package automatically converts images uploaded through Filament's `FileUpload` component!
+### Filament v4
+
+Filament v4 changed the default file storage to `local` disk with `private` visibility. For WebP conversion to work properly with public URLs, explicitly set the disk:
+
+```php
+Forms\Components\FileUpload::make('image')
+    ->image()
+    ->imageEditor()
+    ->disk('public')  // Important for v4!
+    ->visibility('public')  // Important for v4!
+    ->required()
+    ->helperText('Image will be automatically converted to WebP');
+```
+
+**Why this matters:** Without these settings in v4, files are stored privately and `getWebPUrl()` may not generate accessible URLs.
+
+### How It Works
+
+The package automatically detects and converts images uploaded through Filament's `FileUpload` component:
+
+- Detects Livewire temporary files
+- Converts them to standard UploadedFile instances
+- Processes WebP conversion automatically
+- Works with both traditional Laravel forms and Filament
+
+**📖 For detailed Filament integration examples, see [FILAMENT_INTEGRATION.md](FILAMENT_INTEGRATION.md)**
 
 ---
 
@@ -286,12 +316,14 @@ The package automatically converts images uploaded through Filament's `FileUploa
 Get the public URL of a WebP image.
 
 **Parameters:**
+
 - `$attribute` - The model attribute name (e.g., 'image')
 - `$size` - Optional size name (e.g., 'thumbnail', 'medium', 'large')
 
 **Returns:** Public URL of the image or `null` if not found
 
 **Example:**
+
 ```php
 $product->getWebPUrl('image'); // Main image
 $product->getWebPUrl('image', 'thumbnail'); // Thumbnail version
@@ -347,6 +379,7 @@ protected $webpDirectories = [
 
 **Filename Security:**
 The package uses Laravel's built-in `store()` method, which generates secure random filenames like:
+
 ```
 kJ3n5mP9xL2wQ8vR4tY7uI1oA6sD0fG.webp
 ```
@@ -358,6 +391,7 @@ kJ3n5mP9xL2wQ8vR4tY7uI1oA6sD0fG.webp
 ### Complete Product CRUD Example
 
 **Migration:**
+
 ```php
 Schema::create('products', function (Blueprint $table) {
     $table->id();
@@ -373,6 +407,7 @@ Schema::create('products', function (Blueprint $table) {
 ```
 
 **Model:**
+
 ```php
 namespace App\Models;
 
@@ -406,6 +441,7 @@ class Product extends Model
 ```
 
 **Controller:**
+
 ```php
 namespace App\Http\Controllers;
 
@@ -446,11 +482,11 @@ class ProductController extends Controller
         $product->name = $request->name;
         $product->description = $request->description;
         $product->price = $request->price;
-        
+
         if ($request->hasFile('image')) {
             $product->image = $request->file('image'); // Auto-converts!
         }
-        
+
         $product->save();
 
         return redirect()->route('products.index')
@@ -460,13 +496,14 @@ class ProductController extends Controller
 ```
 
 **View (Blade):**
+
 ```blade
 <!-- Product Grid -->
 <div class="grid grid-cols-3 gap-4">
     @foreach($products as $product)
         <div class="border rounded p-4">
-            <img 
-                src="{{ $product->getWebPUrl('image', 'thumbnail') }}" 
+            <img
+                src="{{ $product->getWebPUrl('image', 'thumbnail') }}"
                 alt="{{ $product->name }}"
                 class="w-full h-48 object-cover rounded"
             >
@@ -483,8 +520,8 @@ class ProductController extends Controller
 <div class="max-w-4xl mx-auto">
     <div class="grid grid-cols-2 gap-8">
         <div>
-            <img 
-                src="{{ $product->getWebPUrl('image', 'large') }}" 
+            <img
+                src="{{ $product->getWebPUrl('image', 'large') }}"
                 alt="{{ $product->name }}"
                 class="w-full rounded-lg shadow-lg"
             >
@@ -510,6 +547,7 @@ class ProductController extends Controller
 **Error:** `ext-gd * -> it is missing from your system`
 
 **Solution:** Enable the GD extension in your `php.ini`:
+
 ```ini
 extension=gd
 ```
@@ -521,21 +559,41 @@ Restart your web server after making changes.
 ### Images Not Converting
 
 **Check:**
+
 1. Is the trait added to your model?
 2. Is the attribute in the `$webpImages` array?
 3. Is the uploaded file actually an UploadedFile instance?
 4. Check storage permissions: `php artisan storage:link`
+5. For Filament v4: Did you set `disk('public')` and `visibility('public')` on FileUpload?
 
 ---
 
 ### Storage Link Not Working
 
 Run:
+
 ```bash
 php artisan storage:link
 ```
 
 This creates a symbolic link from `public/storage` to `storage/app/public`.
+
+---
+
+### Filament v4 Images Not Displaying
+
+If you're using Filament v4 and images aren't displaying:
+
+**Solution:** Explicitly set the disk and visibility in your FileUpload component:
+
+```php
+Forms\Components\FileUpload::make('image')
+    ->disk('public')
+    ->visibility('public')
+    ->image();
+```
+
+Filament v4 defaults to `local` disk with `private` visibility, which prevents public URL access.
 
 ---
 
@@ -564,18 +622,31 @@ Please review [our security policy](../../security/policy) on how to report secu
 
 ## License
 
-The MIT License (MIT). Please see [License File](LICENSE.md) for more information.
+The MIT License (MIT). Please see [License File](https://github.com/ranjith67/laravel-webp-converter/blob/main/LICENSE) for more information.
 
 ## Support
 
 If you find this package helpful, please consider:
+
 - ⭐ Starring the repository
 - 🐛 Reporting issues
 - 📖 Improving documentation
 - 🔀 Submitting pull requests
 
+## Compatibility
+
+| Package/Framework | Version       | Status                              |
+| ----------------- | ------------- | ----------------------------------- |
+| Laravel           | 11.x, 12.x    | ✅ Fully Supported                  |
+| PHP               | 8.1, 8.2, 8.3 | ✅ Fully Supported                  |
+| Filament          | v3.x          | ✅ Fully Supported                  |
+| Filament          | v4.x          | ✅ Supported (requires disk config) |
+| Livewire          | v3.x          | ✅ Fully Supported                  |
+| Traditional Forms | All versions  | ✅ Fully Supported                  |
+
 ## Links
 
 - [Documentation](https://github.com/ranjith67/laravel-webp-converter)
+- [Filament Integration Guide](FILAMENT_INTEGRATION.md)
 - [Packagist](https://packagist.org/packages/ranjith/laravel-webp-converter)
 - [Issues](https://github.com/ranjith67/laravel-webp-converter/issues)

@@ -7,6 +7,10 @@
     "laravel/framework": "^11.0|^12.0",
     "ext-gd": "*"
   },
+  "suggest": {
+    "livewire/livewire": "Required for Filament compatibility (^3.0)",
+    "filament/filament": "Admin panel with automatic WebP conversion support (^3.0|^4.0)"
+  },
   "license": "MIT",
   "autoload": {
     "psr-4": {
