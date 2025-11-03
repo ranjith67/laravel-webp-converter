@@ -1,6 +1,6 @@
 # Changelog Updates - Filament Compatibility
 
-## Version: 1.1.0 (Suggested)
+## Version: 1.0.1 (Suggested)
 
 ### Added
 - ✅ **Filament v3 & v4 Support**: Full compatibility with Filament admin panels through Livewire temporary file detection
