@@ -1,117 +1,56 @@
 # Laravel WebP Converter
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+Automatically convert uploaded images to WebP format in Laravel with support for multiple sizes and easy integration.
 
-A Laravel package that automatically converts uploaded images (JPEG, PNG) to the modern WebP format, providing better compression and faster loading times while maintaining image quality.
+[![Latest Version on Packagist](https://img.shields.io/packagist/v/ranjith/laravel-webp-converter.svg?style=flat-square)](https://packagist.org/packages/ranjith/laravel-webp-converter)
+[![Total Downloads](https://img.shields.io/packagist/dt/ranjith/laravel-webp-converter.svg?style=flat-square)](https://packagist.org/packages/ranjith/laravel-webp-converter)
 
 ## Features
 
-- 🚀 **Automatic conversion** of uploaded images to WebP format
-- 🎨 **Preserves transparency** for PNG images
-- 📏 **Generate multiple sizes** of images automatically
-- 🔧 **Highly configurable** quality, storage disk, and sizes
-- 🎯 **Easy integration** with Eloquent models using traits
-- 💾 **Optional original file retention** for fallback support
-- ⚡ **Lightweight** and uses native PHP GD library
+- 🚀 **Automatic Conversion** - Simply assign an uploaded file to a model attribute
+- 🖼️ **Multiple Sizes** - Generate thumbnails, medium, and large versions automatically
+- 🔒 **Secure** - Uses Laravel's built-in secure file handling
+- ⚙️ **Configurable** - Customize quality, sizes, and storage options
+- 📦 **Laravel Integration** - Works seamlessly with Eloquent models
+- 🎨 **Filament Compatible** - Works with Filament admin panel out of the box
+- 💾 **Keep Original** - Option to keep original images for fallback support
 
 ## Requirements
 
-- PHP 8.1, 8.2, or 8.3
-- Laravel 11.x or 12.x
-- PHP GD Extension (with WebP support)
+- PHP 8.1 or higher
+- Laravel 11.0 or higher
+- GD extension enabled
 
 ## Installation
 
-Install the package via Composer:
+You can install the package via composer:
 
 ```bash
 composer require ranjith/laravel-webp-converter
 ```
 
-The service provider will be automatically registered.
+The package will automatically register itself.
 
-### Publish Configuration
+### Publish Configuration (Optional)
 
-Publish the configuration file:
+Publish the config file to customize settings:
 
 ```bash
 php artisan vendor:publish --tag=webp-config
 ```
 
-This will create a `config/webp.php` file where you can customize the package behavior.
-
-## Configuration
-
-The `config/webp.php` file provides several configuration options:
-
-```php
-return [
-    // WebP image quality (0-100, higher is better quality but larger file)
-    'quality' => 80,
-
-    // Keep the original image file after conversion
-    'keep_original' => true,
-
-    // Storage disk (must be defined in config/filesystems.php)
-    'disk' => 'public',
-
-    // Define different image sizes to generate
-    'sizes' => [
-        'thumbnail' => 150,
-        'medium' => 500,
-        'large' => 1200,
-    ],
-
-    // Image extensions that can be converted to WebP
-    'allowed_extensions' => ['jpg', 'jpeg', 'png'],
-];
-```
+This will create a `config/webp.php` file where you can customize:
+- Image quality
+- Generated sizes (thumbnail, medium, large)
+- Storage disk
+- Whether to keep original images
+- Allowed file extensions
 
 ## Usage
 
-### Method 1: Using the WebPConverter Class Directly
+### Basic Usage
 
-You can use the `WebPConverter` class to convert uploaded files manually:
-
-```php
-use Ranjith\LaravelWebpConverter\WebPConverter;
-
-class ProductController extends Controller
-{
-    public function store(Request $request)
-    {
-        $request->validate([
-            'image' => 'required|image|mimes:jpeg,png,jpg|max:2048',
-        ]);
-
-        $converter = app('webp-converter');
-        $result = $converter->convert(
-            $request->file('image'),
-            'products' // optional directory
-        );
-
-        // $result contains:
-        // - 'webp': path to the WebP image
-        // - 'original': path to original image (if keep_original is true)
-        // - 'sizes': array of generated size paths
-
-        $product = Product::create([
-            'name' => $request->name,
-            'image' => $result['webp'],
-            'image_thumbnail' => $result['sizes']['thumbnail'] ?? null,
-            'image_medium' => $result['sizes']['medium'] ?? null,
-        ]);
-
-        return response()->json($product);
-    }
-}
-```
-
-### Method 2: Using the HasWebPImages Trait (Recommended)
-
-The `HasWebPImages` trait provides automatic conversion when setting model attributes.
-
-#### Step 1: Add the Trait to Your Model
+**1. Add the trait to your model:**
 
 ```php
 use Illuminate\Database\Eloquent\Model;
@@ -121,245 +60,522 @@ class Product extends Model
 {
     use HasWebPImages;
 
-    protected $fillable = ['name', 'image', 'thumbnail', 'medium', 'large'];
+    protected $fillable = ['name', 'image'];
 
     // Define which attributes should be converted to WebP
     protected $webpImages = ['image'];
-
-    // Optional: Define custom directories for each attribute
-    protected $webpDirectories = [
-        'image' => 'products/images',
-    ];
-
-    // Optional: Map sizes to columns
-    protected $webpSizeColumns = [
-        'image' => [
-            'thumbnail' => 'thumbnail',
-            'medium' => 'medium',
-            'large' => 'large',
-        ],
-    ];
 }
 ```
 
-#### Step 2: Use It in Your Controller
+**2. Upload images in your controller:**
 
 ```php
-class ProductController extends Controller
+public function store(Request $request)
 {
-    public function store(Request $request)
-    {
-        $request->validate([
-            'image' => 'required|image|mimes:jpeg,png,jpg|max:2048',
-        ]);
+    $product = new Product();
+    $product->name = $request->name;
+    $product->image = $request->file('image'); // Automatically converts to WebP!
+    $product->save();
 
-        // The trait automatically converts the uploaded file to WebP
-        $product = Product::create([
-            'name' => $request->name,
-            'image' => $request->file('image'),
-        ]);
-
-        return response()->json($product);
-    }
+    return redirect()->back();
 }
 ```
 
-#### Step 3: Display Images in Your Views
+That's it! The image is automatically converted to WebP format.
 
-```blade
-<!-- Get the WebP image URL -->
-<img src="{{ $product->getWebPUrl('image') }}" alt="{{ $product->name }}">
+---
 
-<!-- Get a specific size -->
-<img src="{{ $product->getWebPUrl('image', 'thumbnail') }}" alt="{{ $product->name }}">
+### With Multiple Sizes
 
-<!-- With fallback for older browsers -->
-<picture>
-    <source srcset="{{ $product->getWebPUrl('image') }}" type="image/webp">
-    <img src="{{ Storage::url($product->original_image) }}" alt="{{ $product->name }}">
-</picture>
-```
-
-## Advanced Usage
-
-### Custom Image Sizes
-
-Define custom sizes in your `config/webp.php`:
-
-```php
-'sizes' => [
-    'thumbnail' => 150,
-    'small' => 300,
-    'medium' => 500,
-    'large' => 1200,
-    'xlarge' => 1920,
-],
-```
-
-### Using Different Storage Disks
-
-You can specify a different disk in the configuration or per model:
-
-```php
-// In config/webp.php
-'disk' => 's3',
-
-// Or use environment variables
-'disk' => env('WEBP_DISK', 'public'),
-```
-
-### Adjusting WebP Quality
-
-Higher quality means better image quality but larger file sizes:
-
-```php
-// In config/webp.php
-'quality' => 90, // 0-100
-```
-
-### Processing Existing Images
-
-You can also convert existing images programmatically:
-
-```php
-use Ranjith\LaravelWebpConverter\WebPConverter;
-use Illuminate\Http\UploadedFile;
-
-$converter = app('webp-converter');
-
-// Assuming you have a file path
-$uploadedFile = new UploadedFile(
-    storage_path('app/public/old-image.jpg'),
-    'old-image.jpg'
-);
-
-$result = $converter->convert($uploadedFile, 'converted');
-```
-
-## How It Works
-
-1. **Upload**: When an image is uploaded, the package validates the file type
-2. **Store**: Laravel stores the original file with a secure random name
-3. **Convert**: The package converts the image to WebP format using PHP GD
-4. **Resize**: If configured, multiple sizes are generated
-5. **Save**: All versions are saved to your configured storage disk
-6. **Clean**: Optionally, the original file is deleted if `keep_original` is false
-
-## Database Schema Example
-
-Here's a sample migration for using the trait with multiple sizes:
+**1. Add size columns to your migration:**
 
 ```php
 Schema::create('products', function (Blueprint $table) {
     $table->id();
     $table->string('name');
     $table->string('image')->nullable();
-    $table->string('thumbnail')->nullable();
-    $table->string('medium')->nullable();
-    $table->string('large')->nullable();
+    $table->string('image_thumbnail')->nullable();
+    $table->string('image_medium')->nullable();
+    $table->string('image_large')->nullable();
     $table->timestamps();
 });
 ```
 
-## Browser Support
+**2. Configure your model:**
 
-WebP is supported by all modern browsers:
+```php
+use Illuminate\Database\Eloquent\Model;
+use Ranjith\LaravelWebpConverter\Traits\HasWebPImages;
 
-- Chrome 23+
-- Firefox 65+
-- Edge 18+
-- Safari 14+
-- Opera 12.1+
+class Product extends Model
+{
+    use HasWebPImages;
 
-For older browsers, use the `<picture>` element with fallback images.
+    protected $fillable = ['name', 'image', 'image_thumbnail', 'image_medium', 'image_large'];
+
+    // Define which attributes should be converted to WebP
+    protected $webpImages = ['image'];
+
+    // Map size names to database columns
+    protected $webpSizeColumns = [
+        'image' => [
+            'thumbnail' => 'image_thumbnail',
+            'medium' => 'image_medium',
+            'large' => 'image_large',
+        ],
+    ];
+}
+```
+
+**3. Display images in your views:**
+
+```blade
+<!-- Display main image -->
+<img src="{{ $product->getWebPUrl('image') }}" alt="{{ $product->name }}">
+
+<!-- Display thumbnail -->
+<img src="{{ $product->getWebPUrl('image', 'thumbnail') }}" alt="{{ $product->name }}">
+
+<!-- Display medium size -->
+<img src="{{ $product->getWebPUrl('image', 'medium') }}" alt="{{ $product->name }}">
+
+<!-- Display large size -->
+<img src="{{ $product->getWebPUrl('image', 'large') }}" alt="{{ $product->name }}">
+```
+
+---
+
+### Custom Directory
+
+You can specify custom directories for different image attributes:
+
+```php
+class Product extends Model
+{
+    use HasWebPImages;
+
+    protected $webpImages = ['image', 'gallery'];
+
+    // Define custom directories
+    protected $webpDirectories = [
+        'image' => 'products/featured',
+        'gallery' => 'products/gallery',
+    ];
+}
+```
+
+---
+
+### Disable Size Generation
+
+If you only want the main WebP image without additional sizes, set `sizes` to an empty array in `config/webp.php`:
+
+```php
+'sizes' => [],
+```
+
+Then use a simpler migration:
+
+```php
+Schema::create('products', function (Blueprint $table) {
+    $table->id();
+    $table->string('name');
+    $table->string('image')->nullable();
+    $table->timestamps();
+});
+```
+
+And simpler model:
+
+```php
+class Product extends Model
+{
+    use HasWebPImages;
+
+    protected $fillable = ['name', 'image'];
+    protected $webpImages = ['image'];
+}
+```
+
+---
+
+## Configuration
+
+After publishing the config file, you can customize these settings in `config/webp.php`:
+
+```php
+return [
+    // WebP image quality (0-100)
+    'quality' => 80,
+
+    // Keep original image file
+    'keep_original' => true,
+
+    // Storage disk (must be defined in config/filesystems.php)
+    'disk' => 'public',
+
+    // Image sizes to generate
+    'sizes' => [
+        'thumbnail' => 150,
+        'medium' => 500,
+        'large' => 1200,
+    ],
+
+    // Allowed file extensions
+    'allowed_extensions' => ['jpg', 'jpeg', 'png'],
+];
+```
+
+### Configuration Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `quality` | `80` | WebP compression quality (0-100). Higher = better quality, larger file size. |
+| `keep_original` | `true` | Keep the original uploaded image (JPG/PNG) for fallback support. |
+| `disk` | `'public'` | Laravel storage disk to use (must be defined in `config/filesystems.php`). |
+| `sizes` | `[...]` | Array of image sizes to generate. Key = size name, Value = width in pixels. |
+| `allowed_extensions` | `[...]` | Array of allowed image extensions that can be converted to WebP. |
+
+---
+
+## Filament Integration
+
+This package works seamlessly with [Filament](https://filamentphp.com/) admin panels:
+
+```php
+use Filament\Forms;
+
+public static function form(Form $form): Form
+{
+    return $form
+        ->schema([
+            Forms\Components\TextInput::make('name')
+                ->required(),
+            
+            Forms\Components\FileUpload::make('image')
+                ->image()
+                ->imageEditor()
+                ->required()
+                ->helperText('Image will be automatically converted to WebP'),
+        ]);
+}
+
+public static function table(Table $table): Table
+{
+    return $table
+        ->columns([
+            Tables\Columns\TextColumn::make('name'),
+            
+            Tables\Columns\ImageColumn::make('image')
+                ->getStateUsing(fn ($record) => $record->getWebPUrl('image', 'thumbnail'))
+                ->circular(),
+        ]);
+}
+```
+
+The package automatically converts images uploaded through Filament's `FileUpload` component!
+
+---
+
+## API Reference
+
+### Trait Methods
+
+#### `getWebPUrl(string $attribute, ?string $size = null): ?string`
+
+Get the public URL of a WebP image.
+
+**Parameters:**
+- `$attribute` - The model attribute name (e.g., 'image')
+- `$size` - Optional size name (e.g., 'thumbnail', 'medium', 'large')
+
+**Returns:** Public URL of the image or `null` if not found
+
+**Example:**
+```php
+$product->getWebPUrl('image'); // Main image
+$product->getWebPUrl('image', 'thumbnail'); // Thumbnail version
+```
+
+---
+
+### Model Properties
+
+#### `protected $webpImages`
+
+Array of model attributes that should be automatically converted to WebP.
+
+```php
+protected $webpImages = ['image', 'banner', 'gallery'];
+```
+
+#### `protected $webpSizeColumns`
+
+Map size names to database columns for storing different image sizes.
+
+```php
+protected $webpSizeColumns = [
+    'image' => [
+        'thumbnail' => 'image_thumbnail',
+        'medium' => 'image_medium',
+        'large' => 'image_large',
+    ],
+];
+```
+
+#### `protected $webpDirectories`
+
+Custom storage directories for different image attributes.
+
+```php
+protected $webpDirectories = [
+    'image' => 'products/images',
+    'banner' => 'products/banners',
+];
+```
+
+---
+
+## How It Works
+
+1. **Upload** - User uploads JPG/PNG image through your form
+2. **Store** - Laravel securely stores the original with a random filename
+3. **Convert** - Package converts the stored image to WebP format
+4. **Resize** - Generates configured sizes (thumbnail, medium, large)
+5. **Save** - All paths are saved to your database
+6. **Cleanup** - Optionally removes original if `keep_original` is false
+
+**Filename Security:**
+The package uses Laravel's built-in `store()` method, which generates secure random filenames like:
+```
+kJ3n5mP9xL2wQ8vR4tY7uI1oA6sD0fG.webp
+```
+
+---
+
+## Examples
+
+### Complete Product CRUD Example
+
+**Migration:**
+```php
+Schema::create('products', function (Blueprint $table) {
+    $table->id();
+    $table->string('name');
+    $table->text('description')->nullable();
+    $table->decimal('price', 10, 2);
+    $table->string('image')->nullable();
+    $table->string('image_thumbnail')->nullable();
+    $table->string('image_medium')->nullable();
+    $table->string('image_large')->nullable();
+    $table->timestamps();
+});
+```
+
+**Model:**
+```php
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+use Ranjith\LaravelWebpConverter\Traits\HasWebPImages;
+
+class Product extends Model
+{
+    use HasWebPImages;
+
+    protected $fillable = [
+        'name',
+        'description',
+        'price',
+        'image',
+        'image_thumbnail',
+        'image_medium',
+        'image_large',
+    ];
+
+    protected $webpImages = ['image'];
+
+    protected $webpSizeColumns = [
+        'image' => [
+            'thumbnail' => 'image_thumbnail',
+            'medium' => 'image_medium',
+            'large' => 'image_large',
+        ],
+    ];
+}
+```
+
+**Controller:**
+```php
+namespace App\Http\Controllers;
+
+use App\Models\Product;
+use Illuminate\Http\Request;
+
+class ProductController extends Controller
+{
+    public function store(Request $request)
+    {
+        $request->validate([
+            'name' => 'required|string|max:255',
+            'description' => 'nullable|string',
+            'price' => 'required|numeric|min:0',
+            'image' => 'required|image|mimes:jpeg,png,jpg|max:2048',
+        ]);
+
+        $product = new Product();
+        $product->name = $request->name;
+        $product->description = $request->description;
+        $product->price = $request->price;
+        $product->image = $request->file('image'); // Auto-converts to WebP!
+        $product->save();
+
+        return redirect()->route('products.index')
+            ->with('success', 'Product created successfully!');
+    }
+
+    public function update(Request $request, Product $product)
+    {
+        $request->validate([
+            'name' => 'required|string|max:255',
+            'description' => 'nullable|string',
+            'price' => 'required|numeric|min:0',
+            'image' => 'nullable|image|mimes:jpeg,png,jpg|max:2048',
+        ]);
+
+        $product->name = $request->name;
+        $product->description = $request->description;
+        $product->price = $request->price;
+        
+        if ($request->hasFile('image')) {
+            $product->image = $request->file('image'); // Auto-converts!
+        }
+        
+        $product->save();
+
+        return redirect()->route('products.index')
+            ->with('success', 'Product updated successfully!');
+    }
+}
+```
+
+**View (Blade):**
+```blade
+<!-- Product Grid -->
+<div class="grid grid-cols-3 gap-4">
+    @foreach($products as $product)
+        <div class="border rounded p-4">
+            <img 
+                src="{{ $product->getWebPUrl('image', 'thumbnail') }}" 
+                alt="{{ $product->name }}"
+                class="w-full h-48 object-cover rounded"
+            >
+            <h3 class="mt-2 font-bold">{{ $product->name }}</h3>
+            <p class="text-gray-600">${{ number_format($product->price, 2) }}</p>
+            <a href="{{ route('products.show', $product) }}" class="text-blue-500">
+                View Details
+            </a>
+        </div>
+    @endforeach
+</div>
+
+<!-- Product Detail -->
+<div class="max-w-4xl mx-auto">
+    <div class="grid grid-cols-2 gap-8">
+        <div>
+            <img 
+                src="{{ $product->getWebPUrl('image', 'large') }}" 
+                alt="{{ $product->name }}"
+                class="w-full rounded-lg shadow-lg"
+            >
+        </div>
+        <div>
+            <h1 class="text-3xl font-bold">{{ $product->name }}</h1>
+            <p class="text-2xl text-green-600 mt-4">${{ number_format($product->price, 2) }}</p>
+            <p class="mt-4 text-gray-700">{{ $product->description }}</p>
+            <button class="mt-6 bg-blue-500 text-white px-6 py-2 rounded">
+                Add to Cart
+            </button>
+        </div>
+    </div>
+</div>
+```
+
+---
 
 ## Troubleshooting
 
-### GD Library Not Installed or WebP Support Missing
+### GD Extension Not Enabled
 
-Make sure PHP GD extension is installed with WebP support:
+**Error:** `ext-gd * -> it is missing from your system`
 
-```bash
-# Ubuntu/Debian
-sudo apt-get install php-gd
-
-# Check if WebP is supported
-php -r "var_dump(function_exists('imagewebp'));"
+**Solution:** Enable the GD extension in your `php.ini`:
+```ini
+extension=gd
 ```
 
-### Storage Disk Not Found
+Restart your web server after making changes.
 
-Ensure your storage disk is properly configured in `config/filesystems.php`:
+---
 
-```php
-'disks' => [
-    'public' => [
-        'driver' => 'local',
-        'root' => storage_path('app/public'),
-        'url' => env('APP_URL').'/storage',
-        'visibility' => 'public',
-    ],
-],
-```
+### Images Not Converting
 
-Don't forget to create the symbolic link:
+**Check:**
+1. Is the trait added to your model?
+2. Is the attribute in the `$webpImages` array?
+3. Is the uploaded file actually an UploadedFile instance?
+4. Check storage permissions: `php artisan storage:link`
 
+---
+
+### Storage Link Not Working
+
+Run:
 ```bash
 php artisan storage:link
 ```
 
-## Testing
-
-The package uses native Laravel features and can be tested in your application:
-
-```php
-public function test_image_conversion()
-{
-    Storage::fake('public');
-
-    $file = UploadedFile::fake()->image('test.jpg');
-
-    $converter = app('webp-converter');
-    $result = $converter->convert($file, 'test');
-
-    $this->assertNotNull($result['webp']);
-    Storage::disk('public')->assertExists($result['webp']);
-}
-```
-
-## Performance Considerations
-
-- WebP images are typically **25-35% smaller** than JPEG at the same quality
-- Conversion happens during upload, so it's a one-time cost
-- Consider using queues for processing large images:
-
-```php
-ProcessImageJob::dispatch($uploadedFile, 'products');
-```
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-## License
-
-This package is open-sourced software licensed under the [MIT license](LICENSE).
-
-## Credits
-
-- [Ranjith Salian](https://github.com/ranjith67)
-- [All Contributors](../../contributors)
-
-## Support
-
-If you encounter any issues or have questions, please [open an issue](../../issues) on GitHub.
+This creates a symbolic link from `public/storage` to `storage/app/public`.
 
 ---
 
-Made with ❤️ for the Laravel community
+## Testing
+
+```bash
+composer test
+```
+
+## Changelog
+
+Please see [CHANGELOG](CHANGELOG.md) for more information on what has changed recently.
+
+## Contributing
+
+Please see [CONTRIBUTING](CONTRIBUTING.md) for details.
+
+## Security Vulnerabilities
+
+Please review [our security policy](../../security/policy) on how to report security vulnerabilities.
+
+## Credits
+
+- [Ranjith](https://github.com/ranjith67)
+- [All Contributors](../../contributors)
+
+## License
+
+The MIT License (MIT). Please see [License File](LICENSE.md) for more information.
+
+## Support
+
+If you find this package helpful, please consider:
+- ⭐ Starring the repository
+- 🐛 Reporting issues
+- 📖 Improving documentation
+- 🔀 Submitting pull requests
+
+## Links
+
+- [Documentation](https://github.com/ranjith67/laravel-webp-converter)
+- [Packagist](https://packagist.org/packages/ranjith/laravel-webp-converter)
+- [Issues](https://github.com/ranjith67/laravel-webp-converter/issues)
