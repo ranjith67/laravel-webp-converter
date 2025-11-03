@@ -1,0 +1,30 @@
+{
+  "name": "ranjith/laravel-webp-converter",
+  "description": "Automatically convert uploaded images to WebP format in Laravel",
+  "type": "library",
+  "require": {
+    "php": "^8.1|^8.2|^8.3",
+    "laravel/framework": "^11.0|^12.0",
+    "ext-gd": "*"
+  },
+  "license": "MIT",
+  "autoload": {
+    "psr-4": {
+      "Ranjith\\LaravelWebpConverter\\": "src/"
+    }
+  },
+  "extra": {
+    "laravel": {
+      "providers": [
+        "Ranjith\\LaravelWebpConverter\\WebPConverterServiceProvider"
+      ]
+    }
+  },
+  "authors": [
+    {
+      "name": "ranjith67",
+      "email": "ranjithmadival678@gmail.com"
+    }
+  ],
+  "minimum-stability": "stable"
+}
