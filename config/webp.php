@@ -44,9 +44,9 @@ return [
     |
     */
     'sizes' => [
-        'thumbnail' => 150,
-        'medium' => 500,
-        'large' => 1200,
+        // 'thumbnail' => 150,
+        // 'medium' => 500,
+        // 'large' => 1200,
     ],
 
     /*
