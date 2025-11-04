@@ -1,139 +1,92 @@
-# Changelog Updates - Filament Compatibility
+# Changelog
 
-## Version: 1.0.1 (Suggested)
+All notable changes to `laravel-webp-converter` will be documented in this file.
 
-### Added
-- ✅ **Filament v3 & v4 Support**: Full compatibility with Filament admin panels through Livewire temporary file detection
-- ✅ **Livewire Integration**: Automatic detection and conversion of Livewire temporary uploads
-- ✅ **New Methods in HasWebPImages Trait**:
-  - `isLivewireTemporaryFile()` - Detects Livewire temporary file patterns
-  - `convertToUploadedFile()` - Converts Livewire files to UploadedFile instances
-- ✅ **Enhanced Documentation**:
-  - New `FILAMENT_INTEGRATION.md` with comprehensive Filament examples
-  - Updated `README.md` with Filament v3/v4 specific instructions
-  - Added compatibility matrix
-  - Added Filament v4-specific troubleshooting
+## v1.0.2 - 2025-11-04
 
 ### Changed
-- 🔄 **Updated `shouldConvertToWebP()` method**: Now detects both standard UploadedFile and Livewire temporary files
-- 🔄 **Updated `setAttribute()` method**: Converts Livewire files before processing
-- 🔄 **composer.json**: Added Livewire and Filament to suggested packages
+- **Refactored Architecture**: Separated Filament integration into dedicated `WebPFileUploadHelper` class
+- **Simplified Trait**: Removed all Filament/Livewire-specific code from `HasWebPImages` trait
+- **Cleaner Separation**: Trait now focuses solely on traditional Laravel form uploads
 
-### Fixed
-- 🐛 **Filament FileUpload Compatibility**: Package now properly detects and converts files uploaded through Filament's FileUpload component
-- 🐛 **Livewire Temporary File Handling**: Correctly processes Livewire temporary uploads instead of ignoring them
+### Added
+- **New `WebPFileUploadHelper` Class**: Dedicated helper for Filament admin panels located at `src/Filament/WebPFileUploadHelper.php`
+- **Two Static Methods**:
+  - `WebPFileUploadHelper::convert()` - Simple single image conversion
+  - `WebPFileUploadHelper::convertWithSizes()` - Conversion with multiple size support
+- **Enhanced Documentation**: Updated README with clear examples for both Laravel forms and Filament usage
 
 ### Improved
-- 📈 **Framework Compatibility**: Works seamlessly with traditional Laravel controllers, Filament v3, Filament v4, and Livewire components
-- 📈 **Version Agnostic**: Detection logic works across different Filament and Livewire versions
+- **Better Maintainability**: Clear separation between Laravel form handling and Filament integration
+- **Easier to Understand**: Users now have two distinct, simple approaches instead of complex auto-detection
+- **More Flexible**: Filament users have explicit control over when conversion happens
 
-## Files Modified
+### Fixed
+- **Filament Compatibility**: Resolved issues with Filament's file upload lifecycle by using proper hooks instead of setAttribute()
+- **Code Clarity**: Removed complex detection logic in favor of explicit helper methods
 
-### Core Files
-1. **src/Traits/HasWebPImages.php**
-   - Added Livewire temporary file detection
-   - Added conversion method for Livewire files
-   - Enhanced `shouldConvertToWebP()` logic
-   - Enhanced `setAttribute()` to handle Livewire uploads
+### Migration from v1.0.1
 
-2. **composer.json**
-   - Added Livewire v3 to suggested packages
-   - Updated Filament suggestion to include v3 and v4
+**For Regular Laravel Forms**: No changes needed, continues to work exactly the same.
 
-### Documentation Files
-3. **README.md**
-   - Updated Features section with Livewire requirement note
-   - Updated Requirements section with Livewire dependency
-   - Expanded Filament Integration section with v3 and v4 examples
-   - Added Filament v4 specific configuration notes
-   - Added new troubleshooting section for Filament v4
-   - Added Compatibility matrix table
-   - Added link to FILAMENT_INTEGRATION.md
+**For Filament Users**: Update your Create/Edit pages to use the new helper:
 
-4. **FILAMENT_INTEGRATION.md** (NEW)
-   - Complete Filament integration guide
-   - Detailed v3 and v4 examples
-   - Upload flow explanation
-   - Multiple images handling
-   - Advanced configuration examples
-   - Troubleshooting section
-   - Technical implementation details
-
-## Breaking Changes
-
-**NONE** - This is a backward-compatible release. All existing implementations continue to work without modifications.
-
-## Migration Guide
-
-### For Existing Users
-No changes required! Your existing code will continue to work exactly as before.
-
-### For New Filament Users
-
-**Filament v3:**
 ```php
-Forms\Components\FileUpload::make('image')
-    ->image()
-    ->required();
+use Ranjith\LaravelWebpConverter\Filament\WebPFileUploadHelper;
+
+protected function mutateFormDataBeforeCreate(array $data): array
+{
+    if (isset($data['image'])) {
+        $data['image'] = WebPFileUploadHelper::convert($data['image'], 'directory');
+    }
+    return $data;
+}
 ```
 
-**Filament v4:**
-```php
-Forms\Components\FileUpload::make('image')
-    ->image()
-    ->disk('public')  // Required for v4
-    ->visibility('public')  // Required for v4
-    ->required();
-```
+## v1.0.1 - 2025-11-04
 
-## Testing Checklist
+### Added
+- **Filament v3 & v4 Support**: Full compatibility with Filament admin panels through Livewire temporary file detection
+- **Livewire Integration**: Automatic detection and conversion of Livewire temporary uploads
+- **New Methods in HasWebPImages Trait**:
+  - `isLivewireTemporaryFile()` - Detects Livewire temporary file patterns
+  - `convertToUploadedFile()` - Converts Livewire files to UploadedFile instances
+  - `shouldConvertFilamentUpload()` - Checks if string path is a Filament upload
+  - `convertFilamentUpload()` - Handles Filament file conversion
 
-- [ ] Test with traditional Laravel controller uploads
-- [ ] Test with Filament v3 FileUpload component
-- [ ] Test with Filament v4 FileUpload component
-- [ ] Test with direct Livewire file uploads
-- [ ] Test with API file uploads
-- [ ] Verify multiple sizes generation
-- [ ] Verify `getWebPUrl()` returns correct URLs
-- [ ] Test with both public and local disks
-- [ ] Verify backward compatibility
+### Changed
+- **Updated `shouldConvertToWebP()` method**: Now detects both standard UploadedFile and Livewire temporary files
+- **Updated `setAttribute()` method**: Converts Livewire files before processing
 
-## Upgrade Notes
+### Fixed
+- **Filament FileUpload Compatibility**: Package now properly detects and converts files uploaded through Filament's FileUpload component
+- **Livewire Temporary File Handling**: Correctly processes Livewire temporary uploads instead of ignoring them
 
-### From Previous Versions
+## v1.0.0 - 2025-11-03
 
-1. **No Code Changes Required**: This release is fully backward compatible
-2. **Filament Users**: If using Filament v4, add `disk('public')` and `visibility('public')` to FileUpload components
-3. **New Dependency**: Livewire is now automatically supported when installed (no configuration needed)
+### Added
+- Initial release
+- Automatic WebP conversion on file upload
+- Multiple size generation (thumbnail, medium, large)
+- Configurable quality and sizes
+- Laravel 11+ and Laravel 12+ support
+- Secure filename generation using Laravel's built-in methods
+- `HasWebPImages` trait for easy model integration
+- Configurable storage disk support
+- Option to keep or delete original images
+- `getWebPUrl()` helper method for retrieving image URLs
+- Support for custom directories per attribute
+- MIT License
 
-## What Users Should Know
+### Features
+- 🚀 Automatic conversion of JPG/PNG to WebP
+- 🖼️ Multiple size generation with configurable dimensions
+- 🔒 Secure random filenames (Laravel standard)
+- ⚙️ Fully configurable via config file
+- 📦 Seamless Eloquent integration
+- 💾 Optional original image preservation
 
-### Compatibility Status
-
-| Upload Method | Status | Notes |
-|---------------|--------|-------|
-| Laravel Controllers | ✅ Works | Always supported |
-| Filament v3 | ✅ Works | Out of the box |
-| Filament v4 | ✅ Works | Requires disk configuration |
-| Livewire | ✅ Works | Automatically detected |
-| API Uploads | ✅ Works | Always supported |
-
-### Key Features
-
-1. **Transparent Integration**: Package detects upload source automatically
-2. **Version Agnostic**: Works with multiple Filament/Livewire versions
-3. **No Breaking Changes**: Existing implementations unaffected
-4. **Comprehensive Documentation**: Detailed guides for all use cases
-
-## Support
-
-For issues or questions:
-- Traditional Laravel uploads: Check main README.md
-- Filament integration: Check FILAMENT_INTEGRATION.md
-- Bug reports: GitHub Issues
-- Feature requests: GitHub Issues
-
-## Credits
-
-This update ensures the package claim of "Filament Compatible" in the README is now fully accurate and working in production environments.
-
+### Requirements
+- PHP 8.1 or higher
+- Laravel 11.0 or higher
+- GD extension enabled

@@ -12,7 +12,7 @@ Automatically convert uploaded images to WebP format in Laravel with support for
 - 🔒 **Secure** - Uses Laravel's built-in secure file handling
 - ⚙️ **Configurable** - Customize quality, sizes, and storage options
 - 📦 **Laravel Integration** - Works seamlessly with Eloquent models
-- 🎨 **Filament Compatible** - Works with Filament v3 & v4 admin panels (requires Livewire)
+- 🎨 **Filament Compatible** - Works with Filament v3 & v4 admin panels via dedicated helper
 - 💾 **Keep Original** - Option to keep original images for fallback support
 
 ## Requirements
@@ -20,7 +20,6 @@ Automatically convert uploaded images to WebP format in Laravel with support for
 - PHP 8.1 or higher
 - Laravel 11.0 or higher
 - GD extension enabled
-- Livewire 3.x (optional, required for Filament compatibility)
 
 ## Installation
 
@@ -50,7 +49,7 @@ This will create a `config/webp.php` file where you can customize:
 
 ## Usage
 
-### Basic Usage
+### Basic Usage (Traditional Laravel Forms)
 
 **1. Add the trait to your model:**
 
@@ -166,8 +165,6 @@ class Product extends Model
 }
 ```
 
-**Note:** If using Filament with custom directories, ensure the `->directory()` in FileUpload matches the `$webpDirectories` value. See [Filament Integration](#filament-integration) section for details.
-
 ---
 
 ### Disable Size Generation
@@ -244,13 +241,33 @@ return [
 
 ## Filament Integration
 
-This package works seamlessly with [Filament v3 and v4](https://filamentphp.com/) admin panels through Livewire temporary file detection.
+This package provides a dedicated helper class for seamless integration with [Filament v3 and v4](https://filamentphp.com/) admin panels.
 
-### Filament v3
+### Installation
+
+No additional setup needed - the helper is included in the package.
+
+### Basic Usage
+
+**Model (no trait needed for Filament):**
+
+```php
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+
+class Cat extends Model
+{
+    protected $fillable = ['name', 'image'];
+}
+```
+
+**Filament Resource Form:**
 
 ```php
 use Filament\Forms;
-use Filament\Tables;
 
 public static function form(Form $form): Form
 {
@@ -261,97 +278,181 @@ public static function form(Form $form): Form
 
             Forms\Components\FileUpload::make('image')
                 ->image()
-                ->imageEditor()
-                ->required()
-                ->helperText('Image will be automatically converted to WebP'),
+                ->disk('public')
+                ->directory('cats')
+                ->required(),
         ]);
 }
+```
+
+**Create Page:**
+
+```php
+<?php
+
+namespace App\Filament\Resources\CatResource\Pages;
+
+use App\Filament\Resources\CatResource;
+use Filament\Resources\Pages\CreateRecord;
+use Ranjith\LaravelWebpConverter\Filament\WebPFileUploadHelper;
+
+class CreateCat extends CreateRecord
+{
+    protected static string $resource = CatResource::class;
+
+    protected function mutateFormDataBeforeCreate(array $data): array
+    {
+        // Convert image to WebP
+        if (isset($data['image'])) {
+            $data['image'] = WebPFileUploadHelper::convert($data['image'], 'cats');
+        }
+
+        return $data;
+    }
+}
+```
+
+**Edit Page:**
+
+```php
+<?php
+
+namespace App\Filament\Resources\CatResource\Pages;
+
+use App\Filament\Resources\CatResource;
+use Filament\Actions;
+use Filament\Resources\Pages\EditRecord;
+use Ranjith\LaravelWebpConverter\Filament\WebPFileUploadHelper;
+
+class EditCat extends EditRecord
+{
+    protected static string $resource = CatResource::class;
+
+    protected function getHeaderActions(): array
+    {
+        return [
+            Actions\DeleteAction::make(),
+        ];
+    }
+
+    protected function mutateFormDataBeforeSave(array $data): array
+    {
+        // Only convert if a new image was uploaded
+        if (isset($data['image']) && $data['image'] !== $this->record->image) {
+            $data['image'] = WebPFileUploadHelper::convert($data['image'], 'cats');
+        }
+
+        return $data;
+    }
+}
+```
+
+### With Multiple Sizes
+
+**Migration:**
+
+```php
+Schema::create('products', function (Blueprint $table) {
+    $table->id();
+    $table->string('name');
+    $table->string('image')->nullable();
+    $table->string('image_thumbnail')->nullable();
+    $table->string('image_medium')->nullable();
+    $table->string('image_large')->nullable();
+    $table->timestamps();
+});
+```
+
+**Model:**
+
+```php
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+
+class Product extends Model
+{
+    protected $fillable = [
+        'name',
+        'image',
+        'image_thumbnail',
+        'image_medium',
+        'image_large'
+    ];
+}
+```
+
+**Create Page:**
+
+```php
+use Ranjith\LaravelWebpConverter\Filament\WebPFileUploadHelper;
+
+protected function mutateFormDataBeforeCreate(array $data): array
+{
+    if (isset($data['image'])) {
+        $result = WebPFileUploadHelper::convertWithSizes($data['image'], 'products');
+        
+        $data['image'] = $result['webp'];
+        $data['image_thumbnail'] = $result['sizes']['thumbnail'] ?? null;
+        $data['image_medium'] = $result['sizes']['medium'] ?? null;
+        $data['image_large'] = $result['sizes']['large'] ?? null;
+    }
+
+    return $data;
+}
+```
+
+### Display in Filament Table
+
+```php
+use Filament\Tables;
 
 public static function table(Table $table): Table
 {
     return $table
         ->columns([
-            Tables\Columns\TextColumn::make('name'),
+            Tables\Columns\TextColumn::make('name')
+                ->searchable(),
 
             Tables\Columns\ImageColumn::make('image')
-                ->getStateUsing(fn ($record) => $record->getWebPUrl('image', 'thumbnail'))
                 ->circular(),
+
+            Tables\Columns\TextColumn::make('created_at')
+                ->dateTime()
+                ->sortable(),
         ]);
 }
 ```
 
-### Filament v4
+### API Reference
 
-Filament v4 changed the default file storage to `local` disk with `private` visibility. For WebP conversion to work properly with public URLs, explicitly set the disk:
+#### `WebPFileUploadHelper::convert(?string $filePath, ?string $directory = null): ?string`
 
-```php
-Forms\Components\FileUpload::make('image')
-    ->image()
-    ->imageEditor()
-    ->disk('public')  // Important for v4!
-    ->visibility('public')  // Important for v4!
-    ->required()
-    ->helperText('Image will be automatically converted to WebP');
-```
+Converts a single image to WebP format.
 
-**Why this matters:** Without these settings in v4, files are stored privately and `getWebPUrl()` may not generate accessible URLs.
+**Parameters:**
+- `$filePath` - The file path from Filament's FileUpload component
+- `$directory` - Optional custom directory (defaults to the file's directory)
 
-### Custom Directory with Filament
+**Returns:** WebP file path or original path on error
 
-If you specify a custom directory in Filament's FileUpload component, you must also define it in your model's `$webpDirectories` property:
+#### `WebPFileUploadHelper::convertWithSizes(?string $filePath, ?string $directory = null): ?array`
 
-**Filament Form:**
+Converts image and generates multiple sizes.
 
-```php
-Forms\Components\FileUpload::make('image')
-    ->image()
-    ->disk('public')
-    ->directory('products/featured')  // Custom directory
-    ->required();
-```
+**Parameters:**
+- `$filePath` - The file path from Filament's FileUpload component
+- `$directory` - Optional custom directory (defaults to the file's directory)
 
-**Model Configuration:**
-
-```php
-class Product extends Model
-{
-    use HasWebPImages;
-
-    protected $webpImages = ['image'];
-
-    // IMPORTANT: Must match Filament's directory() setting
-    protected $webpDirectories = [
-        'image' => 'products/featured',  // Same as FileUpload directory
-    ];
-
-    protected $webpSizeColumns = [
-        'image' => [
-            'thumbnail' => 'image_thumbnail',
-            'medium' => 'image_medium',
-            'large' => 'image_large',
-        ],
-    ];
-}
-```
-
-**⚠️ Important:** The directory specified in `->directory()` and `$webpDirectories` must match, otherwise WebP files will be stored in the wrong location.
-
-### How It Works
-
-The package automatically detects and converts images uploaded through Filament's `FileUpload` component:
-
-- Detects Livewire temporary files
-- Converts them to standard UploadedFile instances
-- Processes WebP conversion automatically
-- Works with both traditional Laravel forms and Filament
-
-**📖 For detailed Filament integration examples, see [FILAMENT_INTEGRATION.md](FILAMENT_INTEGRATION.md)**
+**Returns:** Array with `['webp' => '...', 'sizes' => [...]]` or null on error
 
 ---
 
 ## API Reference
 
-### Trait Methods
+### Trait Methods (For Traditional Laravel Forms)
 
 #### `getWebPUrl(string $attribute, ?string $size = null): ?string`
 
@@ -373,7 +474,7 @@ $product->getWebPUrl('image', 'thumbnail'); // Thumbnail version
 
 ---
 
-### Model Properties
+### Model Properties (For Traditional Laravel Forms)
 
 #### `protected $webpImages`
 
@@ -430,7 +531,7 @@ kJ3n5mP9xL2wQ8vR4tY7uI1oA6sD0fG.webp
 
 ## Examples
 
-### Complete Product CRUD Example
+### Complete Product CRUD Example (Traditional Laravel)
 
 **Migration:**
 
@@ -600,13 +701,18 @@ Restart your web server after making changes.
 
 ### Images Not Converting
 
-**Check:**
+**For Traditional Laravel Forms:**
 
 1. Is the trait added to your model?
 2. Is the attribute in the `$webpImages` array?
 3. Is the uploaded file actually an UploadedFile instance?
 4. Check storage permissions: `php artisan storage:link`
-5. For Filament v4: Did you set `disk('public')` and `visibility('public')` on FileUpload?
+
+**For Filament:**
+
+1. Did you add `WebPFileUploadHelper::convert()` in `mutateFormDataBeforeCreate()` and `mutateFormDataBeforeSave()`?
+2. Check the file path being passed to the helper
+3. Verify the disk configuration in FileUpload component
 
 ---
 
@@ -622,43 +728,15 @@ This creates a symbolic link from `public/storage` to `storage/app/public`.
 
 ---
 
-### Filament v4 Images Not Displaying
+### Filament: Class Not Found Error
 
-If you're using Filament v4 and images aren't displaying:
+**Error:** `Class "Ranjith\LaravelWebpConverter\Filament\WebPFileUploadHelper" not found`
 
-**Solution:** Explicitly set the disk and visibility in your FileUpload component:
+**Solution:** 
 
-```php
-Forms\Components\FileUpload::make('image')
-    ->disk('public')
-    ->visibility('public')
-    ->image();
-```
-
-Filament v4 defaults to `local` disk with `private` visibility, which prevents public URL access.
-
----
-
-### Files Stored in Wrong Directory (Filament)
-
-If WebP files are being stored in an unexpected location when using Filament:
-
-**Problem:** Mismatch between Filament's `directory()` setting and model's `$webpDirectories`.
-
-**Solution:** Ensure they match:
-
-```php
-// Filament FileUpload
-Forms\Components\FileUpload::make('image')
-    ->directory('products/featured');  // This...
-
-// Model configuration
-protected $webpDirectories = [
-    'image' => 'products/featured',  // ...must match this!
-];
-```
-
-If you don't specify `$webpDirectories`, the package uses `table_name/attribute_name` by default (e.g., `products/image`).
+1. Make sure you've updated the package to v1.0.2 or later
+2. Run `composer update ranjith/laravel-webp-converter`
+3. Clear cache: `php artisan cache:clear` and `php artisan config:clear`
 
 ---
 
@@ -687,7 +765,7 @@ Please review [our security policy](../../security/policy) on how to report secu
 
 ## License
 
-The MIT License (MIT). Please see [License File](https://github.com/ranjith67/laravel-webp-converter/blob/main/LICENSE) for more information.
+The MIT License (MIT). Please see [License File](LICENSE.md) for more information.
 
 ## Support
 
@@ -700,18 +778,15 @@ If you find this package helpful, please consider:
 
 ## Compatibility
 
-| Package/Framework | Version       | Status                              |
-| ----------------- | ------------- | ----------------------------------- |
-| Laravel           | 11.x, 12.x    | ✅ Fully Supported                  |
-| PHP               | 8.1, 8.2, 8.3 | ✅ Fully Supported                  |
-| Filament          | v3.x          | ✅ Fully Supported                  |
-| Filament          | v4.x          | ✅ Supported (requires disk config) |
-| Livewire          | v3.x          | ✅ Fully Supported                  |
-| Traditional Forms | All versions  | ✅ Fully Supported                  |
+| Package/Framework | Version       | Status             |
+| ----------------- | ------------- | ------------------ |
+| Laravel           | 11.x, 12.x    | ✅ Fully Supported |
+| PHP               | 8.1, 8.2, 8.3 | ✅ Fully Supported |
+| Filament          | v3.x, v4.x    | ✅ Fully Supported |
+| Traditional Forms | All versions  | ✅ Fully Supported |
 
 ## Links
 
 - [Documentation](https://github.com/ranjith67/laravel-webp-converter)
-- [Filament Integration Guide](FILAMENT_INTEGRATION.md)
 - [Packagist](https://packagist.org/packages/ranjith/laravel-webp-converter)
 - [Issues](https://github.com/ranjith67/laravel-webp-converter/issues)
